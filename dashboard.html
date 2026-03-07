@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>대시보드 · 사순절 새벽기도</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a href="dashboard.html" class="nav-brand">
+    <div class="nav-brand-icon">✦</div>
+    <span class="nav-brand-text">사순절 <span>새벽기도</span></span>
+  </a>
+  <a href="dashboard.html" class="active">대시보드</a>
+  <a href="index.html">출석 입력</a>
+  <a href="students.html">학생 관리</a>
+  <a href="report.html">출석 현황</a>
+</nav>
+
+<nav class="bottom-nav">
+  <div class="bottom-nav-inner">
+    <a href="dashboard.html" class="active">
+      <span class="nav-icon">⊞</span>대시보드
+    </a>
+    <a href="index.html">
+      <span class="nav-icon">✓</span>출석 입력
+    </a>
+    <a href="students.html">
+      <span class="nav-icon">♟</span>학생 관리
+    </a>
+    <a href="report.html">
+      <span class="nav-icon">≡</span>현황
+    </a>
+  </div>
+</nav>
+
+<div class="page-wrap">
+
+  <!-- 히어로 배너 -->
+  <div class="dash-hero">
+    <div class="dash-hero-label">2026 고등부</div>
+    <div class="dash-hero-title">사순절 특별<br>새벽기도</div>
+    <div class="dash-hero-dates">3월 12일 — 4월 4일 &nbsp;·&nbsp; 21일간</div>
+    <div class="dash-prog-label">
+      <span id="progLabel">진행률</span>
+      <span id="progPct">0%</span>
+    </div>
+    <div class="dash-prog">
+      <div class="dash-prog-fill" id="progBar" style="width:0%"></div>
+    </div>
+  </div>
+
+  <!-- 오늘 카드 -->
+  <div class="today-card" id="todayCard">
+    <div>
+      <div class="tc-lbl">오늘</div>
+      <div class="tc-date" id="todayDate">-</div>
+      <div class="tc-day"  id="todayDay">-</div>
+    </div>
+    <div>
+      <div class="tc-cnt" id="todayCnt">-</div>
+      <div class="tc-cnt-lbl">명 출석</div>
+    </div>
+  </div>
+
+  <!-- 전체 통계 -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-val" id="statStudents">-</div>
+      <div class="stat-lbl">전체 학생</div>
+    </div>
+    <div class="stat-card accent">
+      <div class="stat-val" id="statDays">-</div>
+      <div class="stat-lbl">진행 일수</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val" id="statAvg">-</div>
+      <div class="stat-lbl">평균 출석률</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val" id="statTotal">-</div>
+      <div class="stat-lbl">총 출석 횟수</div>
+    </div>
+  </div>
+
+  <!-- 대시보드 하단 2열 -->
+  <div class="dash-grid mb-20">
+
+    <!-- 출석률 TOP -->
+    <div class="card">
+      <div class="card-title">출석률 TOP 5</div>
+      <div id="topList">
+        <div class="empty"><div class="empty-icon">📊</div>데이터 로딩 중</div>
+      </div>
+    </div>
+
+    <!-- 최근 출석 일자 -->
+    <div class="card">
+      <div class="card-title">최근 출석 현황</div>
+      <div id="recentList">
+        <div class="empty"><div class="empty-icon">📅</div>데이터 로딩 중</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 바로가기 -->
+  <div class="section-title">바로가기</div>
+  <div class="dash-grid">
+    <a href="index.html" class="dash-card">
+      <div class="dash-card-icon">✓</div>
+      <div class="dash-card-title">출석 입력</div>
+      <div class="dash-card-desc">날짜를 선택하고 학생별 출석 여부를 체크합니다</div>
+    </a>
+    <a href="students.html" class="dash-card">
+      <div class="dash-card-icon">♟</div>
+      <div class="dash-card-title">학생 관리</div>
+      <div class="dash-card-desc">학생을 등록하거나 일괄 추가합니다</div>
+    </a>
+    <a href="report.html" class="dash-card">
+      <div class="dash-card-icon">≡</div>
+      <div class="dash-card-title">출석 현황</div>
+      <div class="dash-card-desc">21일 전체 출석 현황과 학생별 통계를 확인합니다</div>
+    </a>
+  </div>
+
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script>
+const PRAYER_DATES = [
+  '2026-03-12','2026-03-13','2026-03-14',
+  '2026-03-16','2026-03-17','2026-03-18','2026-03-19','2026-03-20','2026-03-21',
+  '2026-03-23','2026-03-24','2026-03-25','2026-03-26','2026-03-27','2026-03-28',
+  '2026-03-30','2026-03-31','2026-04-01','2026-04-02','2026-04-03','2026-04-04'
+];
+const DAY_KO = ['일','월','화','수','목','금','토'];
+
+async function load() {
+  const today = new Date().toISOString().slice(0,10);
+  const passedDates = PRAYER_DATES.filter(d => d <= today);
+
+  // 진행률
+  const pct = Math.round(passedDates.length / 21 * 100);
+  document.getElementById('progPct').textContent = pct + '%';
+  document.getElementById('progBar').style.width = pct + '%';
+  document.getElementById('progLabel').textContent = `${passedDates.length}일 / 21일 진행`;
+
+  // 오늘 정보
+  const dt = new Date(today + 'T00:00:00');
+  document.getElementById('todayDate').textContent = today.slice(5).replace('-','/') + ' (' + DAY_KO[dt.getDay()] + ')';
+  const todayIdx = PRAYER_DATES.indexOf(today);
+  if (todayIdx >= 0) {
+    document.getElementById('todayDay').textContent = (todayIdx+1) + '일차';
+  } else if (today < PRAYER_DATES[0]) {
+    document.getElementById('todayDay').textContent = '기도회 시작 전';
+  } else {
+    document.getElementById('todayDay').textContent = '기도회 종료';
+  }
+
+  // DB
+  const [stuRes, attRes] = await Promise.all([
+    db.from('students').select('id,name,grade,class_name').eq('is_active', true),
+    db.from('attendance').select('student_id,date,present').in('date', PRAYER_DATES)
+  ]);
+  const students = stuRes.data || [];
+  const attendance = attRes.data || [];
+
+  document.getElementById('statStudents').textContent = students.length;
+  document.getElementById('statDays').textContent = passedDates.length;
+
+  const presentAll = attendance.filter(a => a.present && a.date <= today);
+  document.getElementById('statTotal').textContent = presentAll.length;
+
+  const possible = students.length * passedDates.length;
+  const avgPct = possible ? Math.round(presentAll.length / possible * 100) : 0;
+  document.getElementById('statAvg').textContent = avgPct + '%';
+
+  // 오늘 출석
+  const todayCnt = attendance.filter(a => a.date === today && a.present).length;
+  document.getElementById('todayCnt').textContent = todayCnt;
+
+  // TOP 5
+  const cntMap = {};
+  students.forEach(s => { cntMap[s.id] = 0; });
+  presentAll.forEach(a => { if (cntMap[a.student_id] !== undefined) cntMap[a.student_id]++; });
+  const ranked = students
+    .map(s => ({ ...s, cnt: cntMap[s.id] || 0 }))
+    .sort((a,b) => b.cnt - a.cnt)
+    .slice(0,5);
+
+  const gradeClass = g => ['','badge-1','badge-2','badge-3'][g] || 'badge-1';
+  document.getElementById('topList').innerHTML = ranked.length
+    ? ranked.map((s,i) => `
+      <div class="recent-row">
+        <span class="recent-rank">${i+1}</span>
+        <span class="badge ${gradeClass(s.grade)}" style="margin-right:2px;">${s.grade}학년</span>
+        <span class="recent-name">${s.name}</span>
+        <span class="recent-cnt">${s.cnt}/${passedDates.length}</span>
+        <span class="recent-rate">${passedDates.length ? Math.round(s.cnt/passedDates.length*100) : 0}%</span>
+      </div>`).join('')
+    : '<div class="empty"><div class="empty-icon">📊</div>학생 데이터 없음</div>';
+
+  // 최근 5일 날짜별 출석 현황
+  const recentDates = [...passedDates].reverse().slice(0,5);
+  const attByDate = {};
+  attendance.forEach(a => {
+    if (!attByDate[a.date]) attByDate[a.date] = 0;
+    if (a.present) attByDate[a.date]++;
+  });
+  document.getElementById('recentList').innerHTML = recentDates.length
+    ? recentDates.map(d => {
+        const cnt = attByDate[d] || 0;
+        const rate = students.length ? Math.round(cnt / students.length * 100) : 0;
+        const idx = PRAYER_DATES.indexOf(d) + 1;
+        const dow = DAY_KO[new Date(d+'T00:00:00').getDay()];
+        const fillClass = rate >= 80 ? 'high' : rate >= 50 ? 'mid' : 'low';
+        return `
+          <div class="recent-row">
+            <span class="recent-rank" style="width:28px;">${idx}일</span>
+            <span class="recent-name" style="font-size:12px;">${d.slice(5).replace('-','/')} (${dow})</span>
+            <span class="recent-cnt">${cnt}명</span>
+            <span class="recent-rate">${rate}%</span>
+          </div>`;
+      }).join('')
+    : '<div class="empty"><div class="empty-icon">📅</div>진행된 일자 없음</div>';
+}
+
+load();
+</script>
+</body>
+</html>
