@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>출석 현황 · 사순절 새벽기도</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<nav>
+  <span class="nav-logo">사순절 새벽기도 2026</span>
+  <a href="index.html">출석 입력</a>
+  <a href="students.html">학생 관리</a>
+  <a href="report.html" class="active">출석 현황</a>
+</nav>
+
+<div class="container">
+  <div class="page-header flex justify-between items-center">
+    <div>
+      <h1>출석 현황</h1>
+      <p>21일 전체 출석 현황</p>
+    </div>
+    <button class="btn btn-ghost" id="btnRefresh">새로고침</button>
+  </div>
+
+  <!-- 전체 통계 -->
+  <div class="stats-row" id="statsRow">
+    <div class="stat-card">
+      <div class="stat-value" id="statTotal">-</div>
+      <div class="stat-label">전체 학생</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="statDays">-</div>
+      <div class="stat-label">진행 일수</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="statAvg">-</div>
+      <div class="stat-label">평균 출석률</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="statToday">-</div>
+      <div class="stat-label">오늘 출석</div>
+    </div>
+  </div>
+
+  <!-- 학년 탭 -->
+  <div class="flex gap-8 mb-20" id="gradeFilter">
+    <button class="btn btn-ghost btn-sm active-filter" data-grade="all">전체</button>
+    <button class="btn btn-ghost btn-sm" data-grade="1">1학년</button>
+    <button class="btn btn-ghost btn-sm" data-grade="2">2학년</button>
+    <button class="btn btn-ghost btn-sm" data-grade="3">3학년</button>
+  </div>
+
+  <!-- 학생별 출석률 테이블 -->
+  <div class="card mb-20">
+    <div style="font-size:12px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:14px;">학생별 출석률</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>학년</th>
+            <th>반</th>
+            <th>이름</th>
+            <th>출석</th>
+            <th style="min-width:120px;">출석률</th>
+          </tr>
+        </thead>
+        <tbody id="reportTable"></tbody>
+      </table>
+    </div>
+    <div id="emptyState" class="empty" style="display:none;">데이터가 없습니다</div>
+  </div>
+
+  <!-- 21일 그리드 -->
+  <div class="card">
+    <div style="font-size:12px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:14px;">
+      일자별 출석 현황
+      <span style="font-weight:400; margin-left:12px;">
+        <span style="display:inline-block; width:10px; height:10px; background:var(--green); border-radius:2px; margin-right:4px;"></span>출석
+        <span style="display:inline-block; width:10px; height:10px; background:var(--surface2); border-radius:2px; margin-left:8px; margin-right:4px;"></span>미출석
+        <span style="display:inline-block; width:10px; height:10px; border:1px solid var(--border); background:var(--bg); border-radius:2px; margin-left:8px; margin-right:4px;"></span>미진행
+      </span>
+    </div>
+    <div style="overflow-x:auto;">
+      <div class="report-grid" id="reportGrid"></div>
+    </div>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script>
+const PRAYER_DATES = [
+  '2026-03-12','2026-03-13','2026-03-14',
+  '2026-03-16','2026-03-17','2026-03-18','2026-03-19','2026-03-20','2026-03-21',
+  '2026-03-23','2026-03-24','2026-03-25','2026-03-26','2026-03-27','2026-03-28',
+  '2026-03-30','2026-03-31','2026-04-01','2026-04-02','2026-04-03','2026-04-04'
+];
+
+const today = new Date().toISOString().slice(0,10);
+const passedDates = PRAYER_DATES.filter(d => d <= today);
+
+let students = [];
+let attendanceData = []; // [{student_id, date, present}]
+let currentGrade = 'all';
+
+async function loadAll() {
+  const [stuRes, attRes] = await Promise.all([
+    db.from('students').select('*').eq('is_active', true).order('grade').order('class_name').order('name'),
+    db.from('attendance').select('student_id, date, present').in('date', PRAYER_DATES)
+  ]);
+  students = stuRes.data || [];
+  attendanceData = attRes.data || [];
+  render();
+}
+
+function getStudentAttendance(studentId) {
+  return attendanceData.filter(a => a.student_id === studentId && a.present);
+}
+
+function render() {
+  const filtered = currentGrade === 'all'
+    ? students
+    : students.filter(s => String(s.grade) === currentGrade);
+
+  // 통계
+  document.getElementById('statTotal').textContent = students.length;
+  document.getElementById('statDays').textContent = passedDates.length;
+
+  const totalPossible = students.length * passedDates.length;
+  const totalPresent = attendanceData.filter(a => a.present && a.date <= today).length;
+  const avgRate = totalPossible ? Math.round(totalPresent / totalPossible * 100) : 0;
+  document.getElementById('statAvg').textContent = avgRate + '%';
+
+  const todayPresent = attendanceData.filter(a => a.date === today && a.present).length;
+  document.getElementById('statToday').textContent = todayPresent;
+
+  // 학생별 테이블
+  const tbody = document.getElementById('reportTable');
+  tbody.innerHTML = '';
+  if (!filtered.length) {
+    document.getElementById('emptyState').style.display = 'block';
+    return;
+  }
+  document.getElementById('emptyState').style.display = 'none';
+
+  filtered.forEach(s => {
+    const cnt = getStudentAttendance(s.id).filter(a => a.date <= today).length;
+    const total = passedDates.length;
+    const rate = total ? Math.round(cnt / total * 100) : 0;
+    const fillClass = rate >= 80 ? 'high' : rate >= 50 ? 'mid' : 'low';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="badge badge-grade">${s.grade}학년</span></td>
+      <td style="color:var(--text-muted);">${s.class_name}</td>
+      <td style="font-weight:500;">${s.name}</td>
+      <td style="font-family:'DM Mono',monospace; font-size:12px;">${cnt} / ${total}</td>
+      <td>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div class="progress-bar" style="width:80px;">
+            <div class="progress-fill ${fillClass}" style="width:${rate}%;"></div>
+          </div>
+          <span style="font-family:'DM Mono',monospace; font-size:12px; color:var(--text-muted); width:32px;">${rate}%</span>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // 그리드
+  renderGrid(filtered);
+}
+
+function renderGrid(filtered) {
+  const grid = document.getElementById('reportGrid');
+  grid.innerHTML = '';
+  // 열 수 = 이름열(1) + 날짜(21)
+  grid.style.gridTemplateColumns = `180px repeat(21, 28px)`;
+
+  // 헤더
+  const nameHeader = document.createElement('div');
+  nameHeader.className = 'rg-header';
+  nameHeader.style.textAlign = 'left';
+  nameHeader.style.paddingLeft = '8px';
+  nameHeader.textContent = '이름';
+  grid.appendChild(nameHeader);
+
+  PRAYER_DATES.forEach((d, i) => {
+    const h = document.createElement('div');
+    h.className = 'rg-header';
+    h.textContent = i + 1;
+    h.title = d;
+    grid.appendChild(h);
+  });
+
+  // 학생 rows
+  const attMap = {};
+  attendanceData.forEach(a => {
+    attMap[`${a.student_id}_${a.date}`] = a.present;
+  });
+
+  filtered.forEach(s => {
+    const nameCell = document.createElement('div');
+    nameCell.className = 'rg-name';
+    nameCell.innerHTML = `<span class="badge badge-grade" style="margin-right:6px;">${s.grade}</span>${s.name}`;
+    grid.appendChild(nameCell);
+
+    PRAYER_DATES.forEach(d => {
+      const cell = document.createElement('div');
+      const key = `${s.id}_${d}`;
+      const isFuture = d > today;
+      if (isFuture) {
+        cell.className = 'rg-cell future';
+      } else {
+        const present = attMap[key];
+        cell.className = 'rg-cell ' + (present ? 'p' : 'a');
+        cell.title = `${s.name} · ${d} · ${present ? '출석' : '미출석'}`;
+      }
+      grid.appendChild(cell);
+    });
+  });
+}
+
+// 필터
+document.getElementById('gradeFilter').addEventListener('click', e => {
+  const btn = e.target.closest('[data-grade]');
+  if (!btn) return;
+  currentGrade = btn.dataset.grade;
+  document.querySelectorAll('#gradeFilter [data-grade]').forEach(b => b.classList.remove('active-filter'));
+  btn.classList.add('active-filter');
+  render();
+});
+
+document.getElementById('btnRefresh').addEventListener('click', loadAll);
+
+loadAll();
+</script>
+</body>
+</html>

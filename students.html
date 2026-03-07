@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>학생 관리 · 사순절 새벽기도</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<nav>
+  <span class="nav-logo">사순절 새벽기도 2026</span>
+  <a href="index.html">출석 입력</a>
+  <a href="students.html" class="active">학생 관리</a>
+  <a href="report.html">출석 현황</a>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <h1>학생 관리</h1>
+    <p>학생을 등록하고 관리합니다</p>
+  </div>
+
+  <!-- 등록 폼 -->
+  <div class="card mb-20">
+    <div style="font-size:13px; font-weight:600; margin-bottom:14px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em;">학생 추가</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>학년</label>
+        <select id="inputGrade" style="width:90px;">
+          <option value="1">1학년</option>
+          <option value="2">2학년</option>
+          <option value="3">3학년</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>반</label>
+        <input type="text" id="inputClass" placeholder="예: 1반" style="width:100px;">
+      </div>
+      <div class="form-group">
+        <label>이름</label>
+        <input type="text" id="inputName" placeholder="이름 입력" style="width:140px;">
+      </div>
+      <button class="btn btn-primary" id="btnAdd">추가</button>
+    </div>
+    <div style="margin-top:12px;">
+      <textarea id="bulkInput" placeholder="여러 명 일괄 입력: 학년,반,이름 형식으로 한 줄에 한 명씩&#10;예)&#10;1,1반,홍길동&#10;1,1반,김철수&#10;2,2반,이영희" style="width:100%; background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:inherit; font-size:12px; padding:10px 12px; outline:none; resize:vertical; height:90px; margin-top:4px;"></textarea>
+      <button class="btn btn-ghost btn-sm" id="btnBulkAdd" style="margin-top:8px;">일괄 추가</button>
+    </div>
+  </div>
+
+  <!-- 학생 목록 -->
+  <div class="card">
+    <div class="flex justify-between items-center mb-16">
+      <span id="studentCount" style="font-size:13px; color:var(--text-muted);">로딩 중...</span>
+      <div class="flex gap-8">
+        <button class="btn btn-ghost btn-sm" data-grade="all" id="filterAll">전체</button>
+        <button class="btn btn-ghost btn-sm" data-grade="1">1학년</button>
+        <button class="btn btn-ghost btn-sm" data-grade="2">2학년</button>
+        <button class="btn btn-ghost btn-sm" data-grade="3">3학년</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>학년</th>
+            <th>반</th>
+            <th>이름</th>
+            <th>등록일</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="studentTable"></tbody>
+      </table>
+    </div>
+    <div id="emptyState" class="empty" style="display:none;">등록된 학생이 없습니다</div>
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script>
+let allStudents = [];
+let currentFilter = 'all';
+
+async function loadStudents() {
+  const { data, error } = await db.from('students').select('*').eq('is_active', true).order('grade').order('class_name').order('name');
+  if (error) { showToast('로드 실패', 'error'); return; }
+  allStudents = data || [];
+  renderTable();
+}
+
+function renderTable() {
+  const filtered = currentFilter === 'all'
+    ? allStudents
+    : allStudents.filter(s => String(s.grade) === currentFilter);
+
+  document.getElementById('studentCount').textContent = `총 ${allStudents.length}명`;
+  const tbody = document.getElementById('studentTable');
+  tbody.innerHTML = '';
+
+  if (!filtered.length) {
+    document.getElementById('emptyState').style.display = 'block';
+    return;
+  }
+  document.getElementById('emptyState').style.display = 'none';
+
+  filtered.forEach(s => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="badge badge-grade">${s.grade}학년</span></td>
+      <td style="color:var(--text-muted);">${s.class_name}</td>
+      <td style="font-weight:500;">${s.name}</td>
+      <td style="color:var(--text-muted); font-family:'DM Mono',monospace; font-size:12px;">${s.created_at.slice(0,10)}</td>
+      <td style="text-align:right;">
+        <button class="btn btn-danger btn-sm" data-id="${s.id}">삭제</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// 추가
+document.getElementById('btnAdd').addEventListener('click', async () => {
+  const grade = parseInt(document.getElementById('inputGrade').value);
+  const class_name = document.getElementById('inputClass').value.trim();
+  const name = document.getElementById('inputName').value.trim();
+  if (!class_name || !name) { showToast('반과 이름을 입력하세요', 'error'); return; }
+
+  const { error } = await db.from('students').insert({ grade, class_name, name, is_active: true });
+  if (error) { showToast('추가 실패: ' + error.message, 'error'); return; }
+  document.getElementById('inputClass').value = '';
+  document.getElementById('inputName').value = '';
+  showToast(`${name} 추가 완료`);
+  loadStudents();
+});
+
+// 일괄 추가
+document.getElementById('btnBulkAdd').addEventListener('click', async () => {
+  const raw = document.getElementById('bulkInput').value.trim();
+  if (!raw) return;
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  const rows = [];
+  for (const line of lines) {
+    const parts = line.split(',');
+    if (parts.length < 3) { showToast(`형식 오류: "${line}"`, 'error'); return; }
+    const grade = parseInt(parts[0]);
+    if (isNaN(grade) || grade < 1 || grade > 3) { showToast(`학년 오류: "${line}"`, 'error'); return; }
+    rows.push({ grade, class_name: parts[1].trim(), name: parts[2].trim(), is_active: true });
+  }
+  const { error } = await db.from('students').insert(rows);
+  if (error) { showToast('일괄 추가 실패: ' + error.message, 'error'); return; }
+  document.getElementById('bulkInput').value = '';
+  showToast(`${rows.length}명 추가 완료`);
+  loadStudents();
+});
+
+// Enter 키
+document.getElementById('inputName').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('btnAdd').click();
+});
+
+// 삭제 (소프트 삭제)
+document.getElementById('studentTable').addEventListener('click', async e => {
+  const btn = e.target.closest('[data-id]');
+  if (!btn) return;
+  if (!confirm('삭제하시겠습니까?')) return;
+  const { error } = await db.from('students').update({ is_active: false }).eq('id', btn.dataset.id);
+  if (error) { showToast('삭제 실패', 'error'); return; }
+  showToast('삭제 완료');
+  loadStudents();
+});
+
+// 필터
+document.querySelectorAll('[data-grade]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    currentFilter = btn.dataset.grade;
+    document.querySelectorAll('[data-grade]').forEach(b => b.classList.remove('active-filter'));
+    btn.classList.add('active-filter');
+    renderTable();
+  });
+});
+document.getElementById('filterAll').classList.add('active-filter');
+
+function showToast(msg, type = 'success') {
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2500);
+}
+
+loadStudents();
+</script>
+</body>
+</html>

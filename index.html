@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>출석 입력 · 사순절 새벽기도</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<nav>
+  <span class="nav-logo">사순절 새벽기도 2026</span>
+  <a href="index.html" class="active">출석 입력</a>
+  <a href="students.html">학생 관리</a>
+  <a href="report.html">출석 현황</a>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <h1>출석 입력</h1>
+    <p>날짜를 선택하고 출석 여부를 체크하세요</p>
+  </div>
+
+  <!-- 날짜 선택 -->
+  <div class="card mb-20">
+    <div class="date-selector">
+      <label>날짜 선택</label>
+      <select id="dateSelect" style="min-width:200px;">
+        <option value="">날짜를 선택하세요</option>
+      </select>
+      <div style="margin-left:auto; display:flex; gap:8px;">
+        <button class="btn btn-ghost btn-sm" id="btnAllPresent">전체 출석</button>
+        <button class="btn btn-ghost btn-sm" id="btnAllAbsent">전체 미출석</button>
+        <button class="btn btn-primary" id="btnSave">저장</button>
+      </div>
+    </div>
+    <div id="dateInfo" style="font-size:12px; color:var(--text-muted);"></div>
+  </div>
+
+  <!-- 출석 목록 -->
+  <div id="attendanceSection" style="display:none;">
+    <div class="flex justify-between items-center mb-16">
+      <span id="summaryText" style="font-size:13px; color:var(--text-muted);"></span>
+    </div>
+
+    <!-- 학년별 필터 -->
+    <div class="flex gap-8 mb-16" id="gradeFilter">
+      <button class="btn btn-ghost btn-sm active-filter" data-grade="all">전체</button>
+      <button class="btn btn-ghost btn-sm" data-grade="1">1학년</button>
+      <button class="btn btn-ghost btn-sm" data-grade="2">2학년</button>
+      <button class="btn btn-ghost btn-sm" data-grade="3">3학년</button>
+    </div>
+
+    <div class="attendance-list" id="attendanceList"></div>
+  </div>
+
+  <div id="emptyState" class="empty" style="display:none;">
+    등록된 학생이 없습니다. <a href="students.html" style="color:var(--accent);">학생 관리</a>에서 먼저 추가하세요.
+  </div>
+</div>
+
+<script src="js/supabase-client.js"></script>
+<script>
+const PRAYER_DATES = [
+  '2026-03-12','2026-03-13','2026-03-14',
+  '2026-03-16','2026-03-17','2026-03-18','2026-03-19','2026-03-20','2026-03-21',
+  '2026-03-23','2026-03-24','2026-03-25','2026-03-26','2026-03-27','2026-03-28',
+  '2026-03-30','2026-03-31','2026-04-01','2026-04-02','2026-04-03','2026-04-04'
+];
+
+const DAY_KO = ['일','월','화','수','목','금','토'];
+
+let students = [];
+let attendanceMap = {}; // student_id → present bool
+let selectedDate = '';
+let currentGrade = 'all';
+
+// 날짜 select 초기화
+function initDateSelect() {
+  const sel = document.getElementById('dateSelect');
+  const today = new Date().toISOString().slice(0,10);
+  PRAYER_DATES.forEach((d, i) => {
+    const dt = new Date(d + 'T00:00:00');
+    const dow = DAY_KO[dt.getDay()];
+    const opt = document.createElement('option');
+    opt.value = d;
+    opt.textContent = `${i+1}일차  ${d.slice(5).replace('-','/')} (${dow})`;
+    if (d === today) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  if (sel.value) loadDate(sel.value);
+}
+
+async function loadDate(date) {
+  selectedDate = date;
+  if (!date) return;
+
+  const idx = PRAYER_DATES.indexOf(date) + 1;
+  const dt = new Date(date + 'T00:00:00');
+  document.getElementById('dateInfo').textContent =
+    `${idx}일차 · ${date} (${DAY_KO[dt.getDay()]}요일)`;
+
+  // 학생 목록
+  const { data: stuData, error } = await db.from('students').select('*').eq('is_active', true).order('grade').order('class_name').order('name');
+  if (error) { showToast('학생 로드 실패', 'error'); return; }
+  students = stuData || [];
+
+  // 해당 날짜 출석 데이터
+  const { data: attData } = await db.from('attendance').select('student_id, present').eq('date', date);
+  attendanceMap = {};
+  (attData || []).forEach(r => { attendanceMap[r.student_id] = r.present; });
+
+  renderList();
+  document.getElementById('attendanceSection').style.display = students.length ? 'block' : 'none';
+  document.getElementById('emptyState').style.display = students.length ? 'none' : 'block';
+}
+
+function renderList() {
+  const list = document.getElementById('attendanceList');
+  const filtered = currentGrade === 'all'
+    ? students
+    : students.filter(s => String(s.grade) === currentGrade);
+
+  list.innerHTML = '';
+  filtered.forEach(s => {
+    const isPresent = attendanceMap[s.id] ?? false;
+    const row = document.createElement('div');
+    row.className = 'attendance-row' + (isPresent ? ' present' : '');
+    row.innerHTML = `
+      <div class="stu-info">
+        <span class="badge badge-grade">${s.grade}학년</span>
+        <span class="stu-meta">${s.class_name}</span>
+        <span class="stu-name">${s.name}</span>
+      </div>
+      <div class="toggle-wrap">
+        <label class="toggle">
+          <input type="checkbox" data-id="${s.id}" ${isPresent ? 'checked' : ''}>
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label ${isPresent ? 'on' : ''}">${isPresent ? '출석' : '미출'}</span>
+      </div>
+    `;
+    const cb = row.querySelector('input[type=checkbox]');
+    cb.addEventListener('change', () => {
+      attendanceMap[s.id] = cb.checked;
+      row.className = 'attendance-row' + (cb.checked ? ' present' : '');
+      row.querySelector('.toggle-label').textContent = cb.checked ? '출석' : '미출';
+      row.querySelector('.toggle-label').className = 'toggle-label' + (cb.checked ? ' on' : '');
+      updateSummary(filtered);
+    });
+    list.appendChild(row);
+  });
+  updateSummary(filtered);
+}
+
+function updateSummary(filtered) {
+  const presentCount = filtered.filter(s => attendanceMap[s.id]).length;
+  document.getElementById('summaryText').textContent =
+    `${filtered.length}명 중 ${presentCount}명 출석`;
+}
+
+// 저장
+document.getElementById('btnSave').addEventListener('click', async () => {
+  if (!selectedDate) { showToast('날짜를 선택하세요', 'error'); return; }
+  const btn = document.getElementById('btnSave');
+  btn.disabled = true;
+  btn.textContent = '저장 중...';
+
+  const upserts = students.map(s => ({
+    student_id: s.id,
+    date: selectedDate,
+    present: attendanceMap[s.id] ?? false
+  }));
+
+  const { error } = await db.from('attendance').upsert(upserts, { onConflict: 'student_id,date' });
+  btn.disabled = false;
+  btn.textContent = '저장';
+  if (error) showToast('저장 실패: ' + error.message, 'error');
+  else showToast('저장 완료 ✓', 'success');
+});
+
+// 전체 출석 / 미출석
+document.getElementById('btnAllPresent').addEventListener('click', () => {
+  students.forEach(s => { attendanceMap[s.id] = true; });
+  renderList();
+});
+document.getElementById('btnAllAbsent').addEventListener('click', () => {
+  students.forEach(s => { attendanceMap[s.id] = false; });
+  renderList();
+});
+
+// 날짜 변경
+document.getElementById('dateSelect').addEventListener('change', e => loadDate(e.target.value));
+
+// 학년 필터
+document.getElementById('gradeFilter').addEventListener('click', e => {
+  const btn = e.target.closest('[data-grade]');
+  if (!btn) return;
+  currentGrade = btn.dataset.grade;
+  document.querySelectorAll('#gradeFilter [data-grade]').forEach(b => b.classList.remove('active-filter'));
+  btn.classList.add('active-filter');
+  renderList();
+});
+
+function showToast(msg, type = 'success') {
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2500);
+}
+
+initDateSelect();
+</script>
+</body>
+</html>
