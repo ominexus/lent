@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>출석 현황 · 사순절 새벽기도</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -97,7 +97,7 @@
 
 </div>
 
-<script src="supabase-client.js"></script>
+<script src="js/supabase-client.js"></script>
 <script>
 const PRAYER_DATES = [
   '2026-03-12','2026-03-13','2026-03-14',
@@ -106,7 +106,7 @@ const PRAYER_DATES = [
   '2026-03-30','2026-03-31','2026-04-01','2026-04-02','2026-04-03','2026-04-04'
 ];
 
-const today = new Date().toISOString().slice(0,10);
+const today = new Date(Date.now() + 9*60*60*1000).toISOString().slice(0,10);
 const passedDates = PRAYER_DATES.filter(d => d <= today);
 const gradeClass = g => ['','badge-1','badge-2','badge-3'][g]||'badge-1';
 

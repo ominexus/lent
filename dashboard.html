@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>대시보드 · 사순절 새벽기도</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -129,7 +129,7 @@
 
 </div>
 
-<script src="supabase-client.js"></script>
+<script src="js/supabase-client.js"></script>
 <script>
 const PRAYER_DATES = [
   '2026-03-12','2026-03-13','2026-03-14',
@@ -140,7 +140,7 @@ const PRAYER_DATES = [
 const DAY_KO = ['일','월','화','수','목','금','토'];
 
 async function load() {
-  const today = new Date().toISOString().slice(0,10);
+  const today = new Date(Date.now() + 9*60*60*1000).toISOString().slice(0,10);
   const passedDates = PRAYER_DATES.filter(d => d <= today);
 
   // 진행률
