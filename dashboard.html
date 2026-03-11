@@ -139,8 +139,19 @@ const PRAYER_DATES = [
 ];
 const DAY_KO = ['일','월','화','수','목','금','토'];
 
+// KST 오늘 날짜
+const today = new Date(Date.now() + 9*60*60*1000).toISOString().slice(0,10);
+// 요일 계산: 명시적 KST 오프셋으로 파싱
+function dowKST(d) { return DAY_KO[new Date(d+'T00:00:00+09:00').getDay()]; }
+
+function showToast(msg, type='error') {
+  const t = document.createElement('div');
+  t.className = `toast ${type}`; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
 async function load() {
-  const today = new Date(Date.now() + 9*60*60*1000).toISOString().slice(0,10);
   const passedDates = PRAYER_DATES.filter(d => d <= today);
 
   // 진행률
@@ -149,9 +160,8 @@ async function load() {
   document.getElementById('progBar').style.width = pct + '%';
   document.getElementById('progLabel').textContent = `${passedDates.length}일 / 21일 진행`;
 
-  // 오늘 정보
-  const dt = new Date(today + 'T00:00:00');
-  document.getElementById('todayDate').textContent = today.slice(5).replace('-','/') + ' (' + DAY_KO[dt.getDay()] + ')';
+  // 오늘 정보 (KST 파싱)
+  document.getElementById('todayDate').textContent = today.slice(5).replace('-','/') + ' (' + dowKST(today) + ')';
   const todayIdx = PRAYER_DATES.indexOf(today);
   if (todayIdx >= 0) {
     document.getElementById('todayDay').textContent = (todayIdx+1) + '일차';
@@ -161,13 +171,17 @@ async function load() {
     document.getElementById('todayDay').textContent = '기도회 종료';
   }
 
-  // DB
+  // DB — limit(10000)으로 기본 1000건 제한 해제, error 검증
   const [stuRes, attRes] = await Promise.all([
     db.from('students').select('id,name,grade,class_name').eq('is_active', true),
-    db.from('attendance').select('student_id,date,present').in('date', PRAYER_DATES)
+    db.from('attendance').select('student_id,date,present').in('date', PRAYER_DATES).limit(10000)
   ]);
-  const students = stuRes.data || [];
-  const attendance = attRes.data || [];
+
+  if (stuRes.error) { showToast('학생 데이터 로드 실패: ' + stuRes.error.message); return; }
+  if (attRes.error) { showToast('출석 데이터 로드 실패: ' + attRes.error.message); return; }
+
+  const students = stuRes.data;
+  const attendance = attRes.data;
 
   document.getElementById('statStudents').textContent = students.length;
   document.getElementById('statDays').textContent = passedDates.length;
@@ -179,7 +193,6 @@ async function load() {
   const avgPct = possible ? Math.round(presentAll.length / possible * 100) : 0;
   document.getElementById('statAvg').textContent = avgPct + '%';
 
-  // 오늘 출석
   const todayCnt = attendance.filter(a => a.date === today && a.present).length;
   document.getElementById('todayCnt').textContent = todayCnt;
 
@@ -204,7 +217,7 @@ async function load() {
       </div>`).join('')
     : '<div class="empty"><div class="empty-icon">📊</div>학생 데이터 없음</div>';
 
-  // 최근 5일 날짜별 출석 현황
+  // 최근 5일
   const recentDates = [...passedDates].reverse().slice(0,5);
   const attByDate = {};
   attendance.forEach(a => {
@@ -216,12 +229,10 @@ async function load() {
         const cnt = attByDate[d] || 0;
         const rate = students.length ? Math.round(cnt / students.length * 100) : 0;
         const idx = PRAYER_DATES.indexOf(d) + 1;
-        const dow = DAY_KO[new Date(d+'T00:00:00').getDay()];
-        const fillClass = rate >= 80 ? 'high' : rate >= 50 ? 'mid' : 'low';
         return `
           <div class="recent-row">
             <span class="recent-rank" style="width:28px;">${idx}일</span>
-            <span class="recent-name" style="font-size:12px;">${d.slice(5).replace('-','/')} (${dow})</span>
+            <span class="recent-name" style="font-size:12px;">${d.slice(5).replace('-','/')} (${dowKST(d)})</span>
             <span class="recent-cnt">${cnt}명</span>
             <span class="recent-rate">${rate}%</span>
           </div>`;

@@ -109,16 +109,26 @@ const PRAYER_DATES = [
 const today = new Date(Date.now() + 9*60*60*1000).toISOString().slice(0,10);
 const passedDates = PRAYER_DATES.filter(d => d <= today);
 const gradeClass = g => ['','badge-1','badge-2','badge-3'][g]||'badge-1';
+function dowKST(d) { return ['일','월','화','수','목','금','토'][new Date(d+'T00:00:00+09:00').getDay()]; }
 
 let students = [], attendance = [], currentGrade = 'all';
+
+function showToast(msg, type='error') {
+  const t = document.createElement('div');
+  t.className = `toast ${type}`; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
 
 async function loadAll() {
   const [s, a] = await Promise.all([
     db.from('students').select('*').eq('is_active',true).order('grade').order('class_name').order('name'),
-    db.from('attendance').select('student_id,date,present').in('date', PRAYER_DATES)
+    db.from('attendance').select('student_id,date,present').in('date', PRAYER_DATES).limit(10000)
   ]);
-  students = s.data || [];
-  attendance = a.data || [];
+  if (s.error) { showToast('학생 데이터 로드 실패: ' + s.error.message); return; }
+  if (a.error) { showToast('출석 데이터 로드 실패: ' + a.error.message); return; }
+  students = s.data;
+  attendance = a.data;
   render();
 }
 
