@@ -156,9 +156,15 @@ function render() {
 // 추가
 document.getElementById('btnAdd').addEventListener('click', async () => {
   const grade = parseInt(document.getElementById('inputGrade').value);
-  const class_name = document.getElementById('inputClass').value.trim();
+  let class_name = document.getElementById('inputClass').value.trim();
   const name = document.getElementById('inputName').value.trim();
   if (!class_name || !name) { showToast('반과 이름을 입력하세요','error'); return; }
+
+  // 반 정보가 숫자만 입력된 경우 '반' 추가
+  if (/^\d+$/.test(class_name)) {
+    class_name += '반';
+  }
+
   const { error } = await db.from('students').insert({ grade, class_name, name, is_active:true });
   if (error) { showToast('추가 실패','error'); return; }
   document.getElementById('inputName').value = '';
@@ -179,7 +185,14 @@ document.getElementById('btnBulkAdd').addEventListener('click', async () => {
     if (p.length < 3) { showToast(`형식 오류: "${line}"`, 'error'); return; }
     const grade = parseInt(p[0]);
     if (isNaN(grade)||grade<1||grade>3) { showToast(`학년 오류: "${line}"`, 'error'); return; }
-    rows.push({ grade, class_name:p[1].trim(), name:p[2].trim(), is_active:true });
+    
+    let class_name = p[1].trim();
+    // 반 정보가 숫자만 입력된 경우 '반' 추가
+    if (/^\d+$/.test(class_name)) {
+      class_name += '반';
+    }
+    
+    rows.push({ grade, class_name, name:p[2].trim(), is_active:true });
   }
   const { error } = await db.from('students').insert(rows);
   if (error) { showToast('일괄 추가 실패','error'); return; }
@@ -191,10 +204,10 @@ document.getElementById('btnBulkAdd').addEventListener('click', async () => {
 // 삭제
 document.addEventListener('click', async e => {
   const btn = e.target.closest('[data-id]');
-  if (!btn || !confirm('삭제하시겠습니까?')) return;
-  const { error } = await db.from('students').update({ is_active:false }).eq('id', btn.dataset.id);
+  if (!btn || !confirm('학생을 삭제하시겠습니까? \n삭제 시 해당 학생의 모든 출석 기록도 함께 삭제되며 복구할 수 없습니다.')) return;
+  const { error } = await db.from('students').delete().eq('id', btn.dataset.id);
   if (error) { showToast('삭제 실패','error'); return; }
-  showToast('삭제 완료');
+  showToast('학생 및 출석 정보 삭제 완료');
   load();
 });
 
